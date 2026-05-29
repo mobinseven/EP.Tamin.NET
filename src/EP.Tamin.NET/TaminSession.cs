@@ -4,19 +4,51 @@ using System.Text.Json;
 
 namespace EP.Tamin.NET;
 
+/// <summary>
+/// Manages an authenticated HTTP session to the EP.Tamin API.
+/// Holds sub-clients for each API domain and handles common headers.
+/// </summary>
 public sealed class TaminSession
 {
     private const string DefaultUrl = "https://ep-test.tamin.ir/api/";
 
+    /// <summary>The underlying <see cref="HttpClient"/> used for all requests.</summary>
     public HttpClient HttpClient { get; }
+
+    /// <summary>Base URI for the API (always ends with a trailing slash).</summary>
     public Uri BaseUri { get; }
+
+    /// <summary>Optional Client-Id header value issued during API onboarding.</summary>
+    public string? ClientId { get; }
+
+    /// <summary>Reference-data and service-lookup operations.</summary>
     public ServiceClient Service { get; }
+
+    /// <summary>E-prescription writing, query, and mutation operations.</summary>
     public PrescriptionClient Prescription { get; }
 
-    public TaminSession(HttpClient httpClient, string? oauthToken = null, Uri? baseUri = null, bool needToken = true)
+    /// <summary>Patient identity verification and eligibility operations.</summary>
+    public IdentityClient Identity { get; }
+
+    /// <summary>Pharmacy dispensing operations.</summary>
+    public PharmacyClient Pharmacy { get; }
+
+    /// <summary>Paraclinic service delivery operations.</summary>
+    public ParaclinicClient Paraclinic { get; }
+
+    /// <summary>
+    /// Creates a <see cref="TaminSession"/> using a pre-obtained OAuth token.
+    /// </summary>
+    /// <param name="httpClient">The <see cref="HttpClient"/> to use.</param>
+    /// <param name="oauthToken">****** Required unless <paramref name="needToken"/> is <c>false</c>.</param>
+    /// <param name="baseUri">Override the base URI (defaults to the sandbox endpoint).</param>
+    /// <param name="clientId">Optional Client-Id header value issued during API onboarding.</param>
+    /// <param name="needToken">When <c>true</c> (default), throws if no token is supplied.</param>
+    public TaminSession(HttpClient httpClient, string? oauthToken = null, Uri? baseUri = null, string? clientId = null, bool needToken = true)
     {
         HttpClient = httpClient;
         BaseUri = EnsureTrailingSlash(baseUri ?? new Uri(DefaultUrl));
+        ClientId = clientId;
 
         if (needToken && string.IsNullOrWhiteSpace(oauthToken))
             throw new AuthTokenNotSuppliedException();
@@ -24,16 +56,38 @@ public sealed class TaminSession
         if (!string.IsNullOrWhiteSpace(oauthToken))
             HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
 
+        if (!string.IsNullOrWhiteSpace(clientId))
+            HttpClient.DefaultRequestHeaders.TryAddWithoutValidation("Client-Id", clientId);
+
         Service = new ServiceClient(this);
         Prescription = new PrescriptionClient(this);
+        Identity = new IdentityClient(this);
+        Pharmacy = new PharmacyClient(this);
+        Paraclinic = new ParaclinicClient(this);
     }
 
+    /// <summary>
+    /// Creates a <see cref="TaminSession"/>, optionally performing a login if no token is provided.
+    /// </summary>
+    /// <param name="httpClient">The <see cref="HttpClient"/> to use.</param>
+    /// <param name="oauthToken">Pre-obtained bearer token. When supplied, login is skipped.</param>
+    /// <param name="baseUri">Override the base URI (defaults to the sandbox endpoint).</param>
+    /// <param name="username">Username for the login flow.</param>
+    /// <param name="password">Password for the login flow.</param>
+    /// <param name="otp">One-time password, when two-step verification is required.</param>
+    /// <param name="providerIdentifier">Provider identifier, when required by the server.</param>
+    /// <param name="clientId">Optional Client-Id header value issued during API onboarding.</param>
+    /// <param name="needToken">When <c>true</c> (default), throws if authentication cannot be established.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task<TaminSession> CreateAsync(
         HttpClient httpClient,
         string? oauthToken = null,
         Uri? baseUri = null,
         string? username = null,
         string? password = null,
+        string? otp = null,
+        string? providerIdentifier = null,
+        string? clientId = null,
         bool needToken = true,
         CancellationToken cancellationToken = default)
     {
@@ -44,10 +98,72 @@ public sealed class TaminSession
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
                 throw new AuthTokenNotSuppliedException();
 
-            oauthToken = await LoginAsync(httpClient, normalizedBaseUri, username, password, cancellationToken).ConfigureAwait(false);
+            oauthToken = await LoginAsync(httpClient, normalizedBaseUri, username, password, otp, providerIdentifier, cancellationToken).ConfigureAwait(false);
         }
 
-        return new TaminSession(httpClient, oauthToken, normalizedBaseUri, needToken);
+        return new TaminSession(httpClient, oauthToken, normalizedBaseUri, clientId, needToken);
+    }
+
+    /// <summary>
+    /// Attempts to refresh an expired access token using the supplied refresh token.
+    /// Updates this session's <c>Authorization</c> header on success.
+    /// </summary>
+    /// <param name="refreshToken">The refresh token obtained from a previous login.</param>
+    /// <param name="clientId">Client identifier, when required by the server.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The new <see cref="TokenResult"/>.</returns>
+    public async Task<TokenResult> RefreshTokenAsync(string refreshToken, string? clientId = null, CancellationToken cancellationToken = default)
+    {
+        var uri = BuildUri("ws/api/auth/refresh");
+        using var request = new HttpRequestMessage(HttpMethod.Post, uri)
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new { refresh_token = refreshToken, client_id = clientId }),
+                Encoding.UTF8,
+                "application/json")
+        };
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        ResponseHandling.Handle(response.StatusCode, response.ReasonPhrase, content);
+
+        using var doc = JsonDocument.Parse(content);
+        var result = JsonSerializer.Deserialize<TokenResult>(doc.RootElement.GetProperty("data").GetRawText())
+                     ?? new TokenResult();
+
+        var token = result.AccessToken ?? result.Data;
+        if (!string.IsNullOrWhiteSpace(token))
+            HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Checks whether the current access token is still valid.
+    /// </summary>
+    /// <param name="accessToken">The access token to validate.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A <see cref="ValidateTokenResult"/> describing the token state.</returns>
+    public async Task<ValidateTokenResult> ValidateTokenAsync(string accessToken, CancellationToken cancellationToken = default)
+    {
+        var uri = BuildUri("ws/api/auth/validate");
+        using var request = new HttpRequestMessage(HttpMethod.Post, uri)
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new { access_token = accessToken }),
+                Encoding.UTF8,
+                "application/json")
+        };
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        ResponseHandling.Handle(response.StatusCode, response.ReasonPhrase, content);
+
+        using var doc = JsonDocument.Parse(content);
+        if (doc.RootElement.TryGetProperty("data", out var data))
+            return JsonSerializer.Deserialize<ValidateTokenResult>(data.GetRawText()) ?? new ValidateTokenResult();
+
+        return JsonSerializer.Deserialize<ValidateTokenResult>(content) ?? new ValidateTokenResult();
     }
 
     internal Uri BuildUri(string endpoint, IReadOnlyDictionary<string, string?>? query = null)
@@ -67,12 +183,39 @@ public sealed class TaminSession
         return new Uri($"{absolute}{separator}{queryString}");
     }
 
-    private static async Task<string> LoginAsync(HttpClient httpClient, Uri baseUri, string username, string password, CancellationToken cancellationToken)
+    internal HttpRequestMessage CreateRequest(HttpMethod method, Uri uri, string? correlationId = null)
+    {
+        var request = new HttpRequestMessage(method, uri);
+        request.Headers.TryAddWithoutValidation("Request-Id", Guid.NewGuid().ToString());
+        if (!string.IsNullOrWhiteSpace(correlationId))
+            request.Headers.TryAddWithoutValidation("Correlation-Id", correlationId);
+        return request;
+    }
+
+    private static async Task<string> LoginAsync(
+        HttpClient httpClient,
+        Uri baseUri,
+        string username,
+        string password,
+        string? otp,
+        string? providerIdentifier,
+        CancellationToken cancellationToken)
     {
         var uri = new Uri(baseUri, "ws/api/auth/login");
+
+        var loginPayload = new Dictionary<string, string?>(4)
+        {
+            ["client_id"] = username,
+            ["secret"] = password
+        };
+        if (!string.IsNullOrWhiteSpace(otp))
+            loginPayload["otp"] = otp;
+        if (!string.IsNullOrWhiteSpace(providerIdentifier))
+            loginPayload["provider_identifier"] = providerIdentifier;
+
         using var request = new HttpRequestMessage(HttpMethod.Post, uri)
         {
-            Content = new StringContent(JsonSerializer.Serialize(new { client_id = username, secret = password }), Encoding.UTF8, "application/json")
+            Content = new StringContent(JsonSerializer.Serialize(loginPayload), Encoding.UTF8, "application/json")
         };
 
         using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -100,3 +243,4 @@ public sealed class TaminSession
         return new Uri($"{uri.AbsoluteUri}/");
     }
 }
+
