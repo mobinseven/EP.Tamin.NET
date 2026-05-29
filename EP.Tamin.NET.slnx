@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EP.Tamin.NET/EP.Tamin.NET.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EP.Tamin.NET.Tests/EP.Tamin.NET.Tests.csproj" />
+  </Folder>
+</Solution>
