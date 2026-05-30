@@ -177,6 +177,77 @@ public class TaminSessionTests
     }
 
     [Fact]
+    public async Task PrescriptionClient_RegisterPrescriptionOverloads_IncludeTypeDiscriminator()
+    {
+        var prescriptionTypes = new List<int>();
+        var handler = new StubHandler(async (request, _) =>
+        {
+            var body = await request.Content!.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(body);
+            prescriptionTypes.Add(document.RootElement.GetProperty("prescription_type").GetInt32());
+            return OkResponse();
+        });
+
+        var session = new TaminSession(new HttpClient(handler), "token");
+
+        await session.Prescription.RegisterVisitPrescriptionAsync(new RegisterVisitPrescriptionRequest
+        {
+            DoctorId = "D1",
+            PatientNationalId = "1234567890",
+            VisitDate = "2024-01-01",
+            ClinicId = "C1"
+        });
+        await session.Prescription.RegisterDrugPrescriptionAsync(new RegisterDrugPrescriptionRequest
+        {
+            DoctorId = "D1",
+            PatientNationalId = "1234567890",
+            VisitDate = "2024-01-01",
+            DrugItems = [new DrugItem { DrugCode = "DR001", Quantity = 1 }]
+        });
+        await session.Prescription.RegisterParaclinicPrescriptionAsync(new RegisterParaclinicPrescriptionRequest
+        {
+            DoctorId = "D1",
+            PatientNationalId = "1234567890",
+            VisitDate = "2024-01-01",
+            ServiceItems = [new ServiceItem { ServiceCode = "LAB001", Quantity = 1 }]
+        });
+        await session.Prescription.RegisterMedicalServicePrescriptionAsync(new RegisterMedicalServicePrescriptionRequest
+        {
+            DoctorId = "D1",
+            PatientNationalId = "1234567890",
+            VisitDate = "2024-01-01",
+            ServiceItems = [new ServiceItem { ServiceCode = "SVC001", Quantity = 1 }]
+        });
+        await session.Prescription.RegisterReferralPrescriptionAsync(new RegisterReferralPrescriptionRequest
+        {
+            DoctorId = "D1",
+            PatientNationalId = "1234567890",
+            TargetSpecialty = "cardiology",
+            TargetProviderType = "clinic",
+            Reason = "consult",
+            VisitDate = "2024-01-01"
+        });
+        await session.Prescription.RegisterPhysiotherapyPrescriptionAsync(new RegisterPhysiotherapyPrescriptionRequest
+        {
+            DoctorId = "D1",
+            PatientNationalId = "1234567890",
+            PhysiotherapyItems = [new PhysiotherapyItem { ServiceCode = "PHY001" }],
+            SessionCount = 5
+        });
+
+        Assert.Equal(
+            [
+                (int)PrescriptionType.Visit,
+                (int)PrescriptionType.Drug,
+                (int)PrescriptionType.Paraclinic,
+                (int)PrescriptionType.Service,
+                (int)PrescriptionType.Referral,
+                (int)PrescriptionType.Physiotherapy
+            ],
+            prescriptionTypes);
+    }
+
+    [Fact]
     public async Task PrescriptionClient_EditPrescription_PostsToEditEndpoint()
     {
         HttpRequestMessage? captured = null;
