@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore EP.Tamin.NET.slnx
+
+      - name: Build
+        run: dotnet build EP.Tamin.NET.slnx --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test EP.Tamin.NET.slnx --no-build --configuration Release --verbosity normal
+
+  pack-and-publish:
+    name: Pack & Publish to NuGet
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore EP.Tamin.NET.slnx
+
+      - name: Pack
+        run: >
+          dotnet pack src/EP.Tamin.NET/EP.Tamin.NET.csproj
+          --no-restore
+          --configuration Release
+          --output ./nupkg
+          -p:Version=${GITHUB_REF_NAME#v}
+
+      - name: Push to NuGet.org
+        run: >
+          dotnet nuget push ./nupkg/*.nupkg
+          --api-key ${{ secrets.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

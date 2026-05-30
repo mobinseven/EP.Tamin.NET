@@ -3,8 +3,13 @@ using System.Text.Json;
 
 namespace EP.Tamin.NET;
 
+/// <summary>Translates HTTP responses into <see cref="JsonElement"/> results or typed exceptions.</summary>
 internal static class ResponseHandling
 {
+    /// <summary>
+    /// Parses <paramref name="content"/> and returns the unwrapped <c>data</c> (or <c>data.list</c>) element,
+    /// or throws a typed exception for non-2xx responses.
+    /// </summary>
     public static JsonElement Handle(HttpStatusCode statusCode, string? reasonPhrase, string content)
     {
         var status = (int)statusCode;
