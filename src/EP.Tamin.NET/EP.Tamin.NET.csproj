@@ -9,7 +9,7 @@
     <PackageId>EP.Tamin.NET</PackageId>
     <Description>A .NET 10 client SDK for the EP.Tamin electronic prescription API (Social Security Insurance of Iran). Inspired by the Python tamin-sdk.</Description>
     <PackageTags>tamin;epresc;electronic-prescription;iran;social-security;sdk;httpclient</PackageTags>
-    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>CS1591</NoWarn>

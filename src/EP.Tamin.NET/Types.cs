@@ -29,5 +29,9 @@ public enum PrescriptionType
     VisitService = 4,
     /// <summary>Medical service prescription.</summary>
     Service = 5,
+    /// <summary>Referral prescription.</summary>
+    Referral = 6,
+    /// <summary>Physiotherapy prescription.</summary>
+    Physiotherapy = 7,
 }
 

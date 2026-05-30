@@ -32,4 +32,4 @@ Please open a GitHub issue with a minimal reproduction and the full exception me
 
 ## License
 
-By contributing you agree that your contributions will be licensed under the same [LGPL-3.0](LICENSE) license as the project.
+By contributing you agree that your contributions will be licensed under the same [MIT](LICENSE) license as the project.

@@ -34,15 +34,12 @@ public class PrescriptionNotCreatedException : Exception
 {
     /// <summary>Application-level error code returned by the API.</summary>
     public string? ErrorCode { get; }
-    /// <summary>Human-readable error message.</summary>
-    public string? Message2 { get; }
 
     /// <inheritdoc />
     public PrescriptionNotCreatedException(string? message, string? errorCode = null)
         : base(message)
     {
         ErrorCode = errorCode;
-        Message2 = message;
     }
 }
 

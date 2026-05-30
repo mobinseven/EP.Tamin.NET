@@ -66,11 +66,11 @@ public static class TaminServiceCollectionExtensions
             var baseUri = new Uri(options.BaseUrl);
 
             if (!string.IsNullOrWhiteSpace(options.OAuthToken))
-                return new TaminSession(httpClient, options.OAuthToken, baseUri, options.ClientId);
+                return new TaminSession(httpClient, options.OAuthToken, baseUri, clientId: options.ClientId);
 
             // If no static token is configured we create the session without one.
             // Callers must invoke TaminSession.CreateAsync(...) to obtain a token at runtime.
-            return new TaminSession(httpClient, null, baseUri, options.ClientId, needToken: false);
+            return new TaminSession(httpClient, null, baseUri, needToken: false, clientId: options.ClientId);
         });
 
         return services;

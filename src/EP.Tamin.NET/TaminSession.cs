@@ -42,9 +42,9 @@ public sealed class TaminSession
     /// <param name="httpClient">The <see cref="HttpClient"/> to use.</param>
     /// <param name="oauthToken">****** Required unless <paramref name="needToken"/> is <c>false</c>.</param>
     /// <param name="baseUri">Override the base URI (defaults to the sandbox endpoint).</param>
-    /// <param name="clientId">Optional Client-Id header value issued during API onboarding.</param>
     /// <param name="needToken">When <c>true</c> (default), throws if no token is supplied.</param>
-    public TaminSession(HttpClient httpClient, string? oauthToken = null, Uri? baseUri = null, string? clientId = null, bool needToken = true)
+    /// <param name="clientId">Optional Client-Id header value issued during API onboarding.</param>
+    public TaminSession(HttpClient httpClient, string? oauthToken = null, Uri? baseUri = null, bool needToken = true, string? clientId = null)
     {
         HttpClient = httpClient;
         BaseUri = EnsureTrailingSlash(baseUri ?? new Uri(DefaultUrl));
@@ -101,7 +101,7 @@ public sealed class TaminSession
             oauthToken = await LoginAsync(httpClient, normalizedBaseUri, username, password, otp, providerIdentifier, cancellationToken).ConfigureAwait(false);
         }
 
-        return new TaminSession(httpClient, oauthToken, normalizedBaseUri, clientId, needToken);
+        return new TaminSession(httpClient, oauthToken, normalizedBaseUri, needToken, clientId);
     }
 
     /// <summary>
@@ -128,8 +128,10 @@ public sealed class TaminSession
         ResponseHandling.Handle(response.StatusCode, response.ReasonPhrase, content);
 
         using var doc = JsonDocument.Parse(content);
-        var result = JsonSerializer.Deserialize<TokenResult>(doc.RootElement.GetProperty("data").GetRawText())
-                     ?? new TokenResult();
+        var payload = doc.RootElement.TryGetProperty("data", out var data)
+            ? data.GetRawText()
+            : content;
+        var result = JsonSerializer.Deserialize<TokenResult>(payload) ?? new TokenResult();
 
         var token = result.AccessToken ?? result.Data;
         if (!string.IsNullOrWhiteSpace(token))

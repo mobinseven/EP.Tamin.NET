@@ -99,5 +99,5 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-[LGPL-3.0](LICENSE)
+[MIT](LICENSE)
 
