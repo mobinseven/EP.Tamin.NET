@@ -13,4 +13,4 @@ Always strictly* follow these architecture rules:
 - The most CRITICAL rule: Keep the design simple. Keep it simple stupid.  
 - Use one source of truth for shared data and rules.
 
-* Strcitly following a rule means not following it must be considered a red line and a deal breaker.
+\* Strcitly following a rule means not following it must be considered a red line and a deal breaker.
