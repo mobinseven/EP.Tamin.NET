@@ -1,4 +1,6 @@
-Follow these architecture rules:
+# Architecture Rules
+
+Always strictly* follow these architecture rules:
 
 - One responsibility per unit.
 - One active context/state model.
@@ -10,3 +12,5 @@ Follow these architecture rules:
 - Protect core logic from unnecessary change.
 - The most CRITICAL rule: Keep the design simple. Keep it simple stupid.  
 - Use one source of truth for shared data and rules.
+
+* Strcitly following a rule means not following it must be considered a red line and a deal breaker.
